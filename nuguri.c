@@ -318,3 +318,15 @@ int kbhit() {
     }
     return 0;
 }
+
+void textcolor(int color){ // 화면 출력 시 색상 설정
+    switch (color){
+        case 1:
+        printf("\033[33m"); // 어두운 노랑(갈색과 유사!)
+        break;
+   default:
+        printf("\033[0m"); // 기본값으로 리셋
+        break;
+    }
+    fflush(stdout);
+}
