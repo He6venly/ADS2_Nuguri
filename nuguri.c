@@ -1,10 +1,68 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+#ifdef _WIN32 // 윈도우의 경우
+#include <conio.h>
+#include <windows.h>
+#define kbhit _kbhit
+void clrscr(){
+    system("cls");
+}
+void usleep(int us){
+    Sleep(us/1000); // Linux의 usleep = Sleep*1000이므로, usleep을 기준으로 함
+}
+
+void enable_raw_mode() { // 터미널 초기 설정
+    SetConsoleOutputCP(65001);
+}
+void disable_raw_mode() {}
+
+#else
 #include <unistd.h>
 #include <termios.h>
 #include <fcntl.h>
-#include <time.h>
+
+// 터미널 설정
+struct termios orig_termios;
+
+// 터미널 Raw 모드 활성화/비활성화
+void disable_raw_mode() { tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios); }
+void enable_raw_mode() {
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    atexit(disable_raw_mode);
+    struct termios raw = orig_termios;
+    raw.c_lflag &= ~(ECHO | ICANON);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+// 비동기 키보드 입력 확인
+int kbhit() {
+    struct termios oldt, newt;
+    int ch;
+    int oldf;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+    ch = getchar();
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+    if(ch != EOF) {
+        ungetc(ch, stdin);
+        return 1;
+    }
+    return 0;
+}
+
+void clrscr(){
+    printf("\x1b[2J\x1b[H");
+}
+
+#endif
 
 // 맵 및 게임 요소 정의 (수정된 부분)
 #define MAP_WIDTH 40  // 맵 너비를 40으로 변경
@@ -41,8 +99,7 @@ int enemy_count = 0;
 Coin coins[MAX_COINS];
 int coin_count = 0;
 
-// 터미널 설정
-struct termios orig_termios;
+
 
 // 함수 선언
 void disable_raw_mode();
@@ -54,7 +111,6 @@ void update_game(char input);
 void move_player(char input);
 void move_enemies();
 void check_collisions();
-int kbhit();
 
 int main() {
     srand(time(NULL));
@@ -96,7 +152,7 @@ int main() {
                 init_stage();
             } else {
                 game_over = 1;
-                printf("\x1b[2J\x1b[H");
+                clrscr(); // printf("\x1b[2J\x1b[H");에서 Windows도 호환되게
                 printf("축하합니다! 모든 스테이지를 클리어했습니다!\n");
                 printf("최종 점수: %d\n", score);
             }
@@ -105,17 +161,6 @@ int main() {
 
     disable_raw_mode();
     return 0;
-}
-
-
-// 터미널 Raw 모드 활성화/비활성화
-void disable_raw_mode() { tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios); }
-void enable_raw_mode() {
-    tcgetattr(STDIN_FILENO, &orig_termios);
-    atexit(disable_raw_mode);
-    struct termios raw = orig_termios;
-    raw.c_lflag &= ~(ECHO | ICANON);
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
 // 맵 파일 로드
@@ -168,7 +213,7 @@ void init_stage() {
 
 // 게임 화면 그리기
 void draw_game() {
-    printf("\x1b[2J\x1b[H");
+    clrscr(); // printf("\x1b[2J\x1b[H");에서 Windows도 호환되게
     printf("Stage: %d | Score: %d\n", stage + 1, score);
     printf("조작: ← → (이동), ↑ ↓ (사다리), Space (점프), q (종료)\n");
 
@@ -298,23 +343,3 @@ void check_collisions() {
     }
 }
 
-// 비동기 키보드 입력 확인
-int kbhit() {
-    struct termios oldt, newt;
-    int ch;
-    int oldf;
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-    newt.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-    ch = getchar();
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    fcntl(STDIN_FILENO, F_SETFL, oldf);
-    if(ch != EOF) {
-        ungetc(ch, stdin);
-        return 1;
-    }
-    return 0;
-}
