@@ -119,6 +119,8 @@ int main() {
     load_maps();
     init_stage();
 
+    openingUI(); // 오프닝 함수 호출
+
     char c = '\0';
     int game_over = 0;
 
@@ -356,3 +358,37 @@ void textcolor(int color){ // 화면 출력 시 색상 설정
     fflush(stdout);
 }
 
+void openingUI() {
+
+    clrscr(); // 화면 초기화
+    textcolor(1); // 색상 설정
+
+    printf("       ____                        ____   \n");
+    printf("      /    \\                     /     \\ \n");
+    printf("     /      \\                   /       \\  \n");
+    printf("================================================\n");
+
+    printf("\n");
+    textcolor(0);
+    
+    printf("          ████     ████   █    █  ██████ \n");
+    printf("         █        █    █  ██  ██  █            \n");
+    printf("         █        ██████  █ ██ █  ██████       \n");
+    printf("         █  ████  █    █  █    █  █            \n");
+    printf("          ████ █  █    █  █    █  ██████       \n");
+
+    printf("\n");
+
+    printf("     ██████  ██████   ████   ██████  ██████  \n");
+    printf("     █         ██    █    █  █    █    ██    \n");
+    printf("     ██████    ██    ██████  ██████    ██   \n");
+    printf("          █    ██    █    █  █    █    ██     \n");
+    printf("     ██████    ██    █    █  █     █   ██ \n");
+    
+    printf("\n");
+    textcolor(1);
+
+    printf("================================================\n");
+    textcolor(0); // 기본값으로 초기화
+    getchar();
+}
