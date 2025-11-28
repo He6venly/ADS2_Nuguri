@@ -111,6 +111,7 @@ void update_game(char input);
 void move_player(char input);
 void move_enemies();
 void check_collisions();
+void textcolor(int color);
 
 int main() {
     srand(time(NULL));
@@ -341,5 +342,17 @@ void check_collisions() {
             score += 20;
         }
     }
+}
+
+void textcolor(int color){ // 화면 출력 시 색상 설정
+    switch (color){
+        case 1:
+        printf("\033[33m"); // 어두운 노랑(갈색과 유사!)
+        break;
+   default:
+        printf("\033[0m"); // 기본값으로 리셋
+        break;
+    }
+    fflush(stdout);
 }
 
