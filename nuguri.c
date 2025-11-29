@@ -112,10 +112,19 @@ void move_player(char input);
 void move_enemies();
 void check_collisions();
 void textcolor(int color);
+int title();
+void openingUI();
 
 int main() {
     srand(time(NULL));
     enable_raw_mode();
+
+    // title 화면에서 0 선택 시 게임 종료, 1 선택 시 title 함수 내부에서 openingUI 함수 호출
+    if(title() == 0){ 
+        disable_raw_mode();
+        return 0;
+    }
+
     load_maps();
     init_stage();
 
@@ -354,5 +363,91 @@ void textcolor(int color){ // 화면 출력 시 색상 설정
         break;
     }
     fflush(stdout);
+}
+
+// 코드 실행 시 1 또는 0 중 선택에 따라 게임 시작 혹은 종료
+int title(){
+    char choice;
+    // 무한 루프로 사용자가 유효한 입력(1 또는 0)을 할 때까지 타이틀 화면을 반복 출력하고 입력 기다림
+    while(1) {
+        clrscr();
+        textcolor(1);
+
+        printf("       ____                        ____   \n");
+        printf("      /    \\                     /     \\ \n");
+        printf("     /      \\                   /       \\  \n");
+        printf("================================================\n");
+
+        printf("\n");
+        textcolor(0);
+        printf("               N U G U R I G A M E              \n");
+
+        printf("\n");
+        printf("                  1. Game Start                  \n");
+        printf("                  0. Exit                        \n");
+
+        printf("\n");
+        printf("Ready to play? (1/0): ");
+
+        printf("\n");
+        textcolor(1);
+        printf("================================================\n");
+
+        // raw mode 이용하여 단일 키 입력 받기(kbhit 활용)
+        enable_raw_mode();
+        // 키 입력이 있을 때까지 대기
+        while (!kbhit()) usleep(1000);
+        // 입력된 키 가져오기
+        choice = getchar();
+        // 터미널 설정 원래대로 되돌림
+        disable_raw_mode();
+
+        // 입력된 문자에 따른 게임 분기 처리
+        // 1 선택 시 openingUI 보여준 후 메인 함수로 1을 반환하여 게임 루프 시작하도록 지시
+        if(choice == '1'){
+            openingUI();
+            return 1;
+        }
+        // 0 선택 시 메인 함수로 0을 반환하여 프로그램을 종료하도록 지시
+        else if(choice == '0'){
+            return 0;
+        }
+        // 1이나 0이 아니면 루프가 다시 돌아 처음부터 화면을 다시 출력하고 입력을 기다림
+    }
+}
+
+void openingUI() {
+
+    clrscr(); // 화면 초기화
+    textcolor(1); // 색상 설정
+
+    printf("       ____                        ____   \n");
+    printf("      /    \\                     /     \\ \n");
+    printf("     /      \\                   /       \\  \n");
+    printf("================================================\n");
+
+    printf("\n");
+    textcolor(0);
+    
+    printf("          ████     ████   █    █  ██████ \n");
+    printf("         █        █    █  ██  ██  █            \n");
+    printf("         █        ██████  █ ██ █  ██████       \n");
+    printf("         █  ████  █    █  █    █  █            \n");
+    printf("          ████ █  █    █  █    █  ██████       \n");
+
+    printf("\n");
+
+    printf("     ██████  ██████   ████   ██████  ██████  \n");
+    printf("     █         ██    █    █  █    █    ██    \n");
+    printf("     ██████    ██    ██████  ██████    ██   \n");
+    printf("          █    ██    █    █  █    █    ██     \n");
+    printf("     ██████    ██    █    █  █     █   ██ \n");
+    
+    printf("\n");
+    textcolor(1);
+
+    printf("================================================\n");
+    textcolor(0); // 기본값으로 초기화
+    getchar();
 }
 
