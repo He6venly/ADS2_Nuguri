@@ -87,6 +87,7 @@ char map[MAX_STAGES][MAP_HEIGHT][MAP_WIDTH + 1];
 int player_x, player_y;
 int stage = 0;
 int score = 0;
+int life = 3; //목숨 전역변수
 
 // 플레이어 상태
 int is_jumping = 0;
@@ -107,7 +108,7 @@ void enable_raw_mode();
 void load_maps();
 void init_stage();
 void draw_game();
-void update_game(char input);
+void update_game(char input, int *game_over); //game_over 변수 포인터 추가
 void move_player(char input);
 void move_enemies();
 void check_collisions();
@@ -151,7 +152,7 @@ int main() {
             c = '\0';
         }
 
-        update_game(c);
+        update_game(c, &game_over); //인자로 주소값 넘겨줌
         draw_game();
         usleep(90000);
 
@@ -260,10 +261,10 @@ void draw_game() {
 }
 
 // 게임 상태 업데이트
-void update_game(char input) {
+void update_game(char input, int *game_over) { //메인에서 넘겨준 주소값 가르키는 포인터
     move_player(input);
     move_enemies();
-    check_collisions();
+    check_collisions(game_over); //포인터를 check_collisions에 넘김
 }
 
 // 플레이어 이동 로직
@@ -337,12 +338,17 @@ void move_enemies() {
 }
 
 // 충돌 감지 로직
-void check_collisions() {
+void check_collisions(int *game_over) { //포인터 받아서
     for (int i = 0; i < enemy_count; i++) {
-        if (player_x == enemies[i].x && player_y == enemies[i].y) {
+        if (player_x == enemies[i].x && player_y == enemies[i].y) { //적과 겹치면
             score = (score > 50) ? score - 50 : 0;
-            init_stage();
-            return;
+            life--; //목숨 -1
+            if (life > 0) { //목숨 남았으면 맵 초기화
+                init_stage();
+            } else { //아니면(게임오버면) game_over = 1
+                *game_over = 1;
+            }
+            return; //게임오버하면 코인 충돌 감지는 돌아가면 안되니까 리턴으로 종료
         }
     }
     for (int i = 0; i < coin_count; i++) {
