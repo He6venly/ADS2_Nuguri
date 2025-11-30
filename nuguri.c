@@ -181,11 +181,11 @@ void load_maps() {
         exit(1);
     }
     int s = 0, r = 0;
-    char line[MAP_WIDTH + 2]; // 버퍼 크기는 MAP_WIDTH에 따라 자동 조절됨
-    while (s < MAX_STAGES && fgets(line, sizeof(line), file)) {
-        if ((line[0] == '\n' || line[0] == '\r') && r > 0) {
-            s++;
-            r = 0;
+    char line[MAP_WIDTH + 4]; // 버퍼 크기는 MAP_WIDTH에 따라 자동 조절됨
+    while (s < MAX_STAGES && fgets(line, sizeof(line), file)) { //파일에서 한줄 읽어서 line에 저장
+        if ((line[0] == '\n' || line[0] == '\r') && r > 0) {    // fgets이 file에서 line만큼 마지막 읽어올 때 \0 널값 넣어서 1개 덜 읽음
+            s++;                                              //-> 41만큼 읽어서 마지막 \n이 남음 -> fgets는 꽉 찰때까지 or \n이 들어올 때 까지 읽음
+            r = 0;                                            //-> 제일 처음에 첫 줄에서 남은 \n 이 들어와 읽기 끝냄
             continue;
         }
         if (r < MAP_HEIGHT) {
