@@ -127,8 +127,9 @@ void update_game(char input, int *game_over); //game_over 변수 포인터 추�
 void textcolor(int color);
 int title();
 void openingUI();
-void gameoverUI();
+void gameoverUI(int final_score);
 void restart_game(int *game_over);
+void gameclearUI(int final_score);
 void cleanBuf();
 //버퍼비우기용
 void cleanBuf() {
@@ -186,9 +187,8 @@ int main() {
                 init_stage();
             } else {
                 game_over = 1;
-                clrscr(); // printf("\x1b[2J\x1b[H");에서 Windows도 호환되게
-                printf("축하합니다! 모든 스테이지를 클리어했습니다!\n");
-                printf("최종 점수: %d\n", score);
+                
+                gameclearUI(score); // gameclearUI 함수 호출
             }
         }
     }
@@ -483,7 +483,7 @@ void openingUI() {
     getch();
 }
 
-void gameoverUI() {
+void gameoverUI(int final_score) {
     clrscr();
     textcolor(1);
 
@@ -511,7 +511,7 @@ void gameoverUI() {
 
     printf("\n");
 
-    printf("                              최종 점수: %d \n", score);
+    printf("                              최종 점수: %d \n", final_score);
     printf("                              RESTART? (Y/N) \n");
 
     printf("\n");
@@ -524,7 +524,7 @@ void gameoverUI() {
 void restart_game(int *game_over) { //여기도 game_over포인터 받아서
     char re;
 
-    gameoverUI();
+    gameoverUI(score);
 
      // 키 입력이 있을 때까지 대기
     while (!kbhit()) usleep(1000);
@@ -544,4 +544,42 @@ void restart_game(int *game_over) { //여기도 game_over포인터 받아서
     else { //종료
         *game_over = 1;
     }
+}
+
+void gameclearUI(int final_score){ // score를 인수로 받기 위해 int score
+    clrscr();
+    textcolor(1);
+
+    printf("        ____                        ____   \n");
+    printf("       /    \\                     /     \\ \n");
+    printf("      /      \\                   /       \\  \n");
+    printf("================================================\n");
+
+    printf("\n");
+    textcolor(0);
+
+    printf("          ████     ████   █    █  ██████ \n");
+    printf("         █        █    █  ██  ██  █            \n");
+    printf("         █        ██████  █ ██ █  ██████       \n");
+    printf("         █  ████  █    █  █    █  █            \n");
+    printf("          ████ █  █    █  █    █  ██████       \n");
+
+    printf("\n");
+
+    printf("      █████  █      ██████   ████   ██████   █    \n");
+    printf("     █       █      █       █    █  █     █  █    \n");
+    printf("     █       █      ██████  ██████  ██████   █    \n");
+    printf("     █       █      █       █    █  █    █        \n");
+    printf("      █████  █████  ██████  █    █  █     █  █    \n");
+
+    printf("\n");
+
+    printf("                               최종 점수: %d\n", final_score);
+
+    printf("\n");
+    textcolor(1);
+
+    printf("================================================\n");
+    textcolor(0);
+    getch();
 }
