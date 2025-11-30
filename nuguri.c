@@ -125,9 +125,8 @@ void check_collisions();
 void textcolor(int color);
 int title();
 void openingUI();
+void restart_game(int *game_over);
 void cleanBuf();
-
-
 //버퍼비우기용
 void cleanBuf() {
 	int c;
@@ -370,9 +369,9 @@ void check_collisions(int *game_over) { //포인터 받아서
             if (life > 0) { //목숨 남았으면 맵 초기화
                 init_stage();
             } else { //아니면(게임오버면) game_over = 1
-                *game_over = 1;
+                restart_game(game_over); //check_collisions 안에 구현하면 복잡할 거 같아서 따로 restart_game함수 구현
             }
-            return; //게임오버하면 코인 충돌 감지는 돌아가면 안되니까 리턴으로 종료
+            return; //적과 충돌하면 코인 충돌은 돌아가면 안되서 return으로 종료
         }
     }
     for (int i = 0; i < coin_count; i++) {
@@ -479,3 +478,24 @@ void openingUI() {
     getch();
 }
 
+void restart_game(int *game_over) { //여기도 game_over포인터 받아서
+    char re;
+
+    clrscr(); //여기에 재시작 ui
+
+     // 키 입력이 있을 때까지 대기
+    while (!kbhit()) usleep(1000);
+    // 입력된 키 가져오기
+    re = getch();
+
+    cleanBuf(); //입력버퍼는 지우기
+
+    if (re == 'y' || re == 'Y') { //y/Y 입력시 재시작
+    life = 3;
+    score = 0;
+    stage = 0;
+    init_stage();
+    } else { //종료
+    *game_over = 1;
+    }
+}
