@@ -3,7 +3,7 @@
 #include <string.h>
 #include <time.h>
 
-#ifdef _WIN32 // 윈도우의 경우
+#if defined(_WIN32) // 윈도우의 경우, 추가: 다른 OS(Linux, MacOS)의 경우에는 다른 분기로 넘어가기 위해 직접 #elif로 지정해주기 위해서 #ifdef에서 #if를 사용.
 #include <conio.h>
 #include <windows.h>
 #define kbhit _kbhit
@@ -25,7 +25,7 @@ int getch() {
     return _getch();
 }
 
-#else
+#elif defined(__APPLE__) || defined(__MACH__) || defined(__linux__) // 리눅스, MacOS의 경우 분기
 #include <unistd.h>
 #include <termios.h>
 #include <fcntl.h>
@@ -72,6 +72,8 @@ int getch() {
     return getchar();
 }
 
+#else
+    #error "Unsupported platform!" // 현재는 Windows, MacOS, Linux를 제외한 다른 OS는 지원하지 않기 때문에 이외의 OS로 실행 시 에러를 뱉음.
 #endif
 
 // 맵 및 게임 요소 정의 (수정된 부분)
@@ -121,7 +123,7 @@ void draw_game();
 void update_game(char input, int *game_over); //game_over 변수 포인터 추가
 void move_player(char input);
 void move_enemies();
-void check_collisions();
+void check_collisions(int *game_over);
 void textcolor(int color);
 int title();
 void openingUI();
