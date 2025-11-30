@@ -7,6 +7,7 @@
 #include <conio.h>
 #include <windows.h>
 #define kbhit _kbhit
+
 void clrscr(){
     system("cls");
 }
@@ -18,6 +19,11 @@ void enable_raw_mode() { // 터미널 초기 설정
     SetConsoleOutputCP(65001);
 }
 void disable_raw_mode() {}
+
+//디아블로때와 동일하게 window / 리눅스계열 getch로 함수이름 통일해서 분기로 처리
+int getch() {
+    return _getch();
+}
 
 #else
 #include <unistd.h>
@@ -60,6 +66,10 @@ int kbhit() {
 
 void clrscr(){
     printf("\x1b[2J\x1b[H");
+}
+
+int getch() {
+    return getchar();
 }
 
 #endif
@@ -115,10 +125,19 @@ void check_collisions();
 void textcolor(int color);
 int title();
 void openingUI();
+void cleanBuf();
+
+
+//버퍼비우기용
+void cleanBuf() {
+	int c;
+	while ((c = getchar()) != '\n' && c != EOF);
+}
 
 int main() {
     srand(time(NULL));
-    enable_raw_mode();
+
+    enable_raw_mode(); // rawmode를 title 호출 로직 뒤로 옮김.
 
     // title 화면에서 0 선택 시 게임 종료, 1 선택 시 title 함수 내부에서 openingUI 함수 호출
     if(title() == 0){ 
@@ -134,14 +153,14 @@ int main() {
 
     while (!game_over && stage < MAX_STAGES) {
         if (kbhit()) {
-            c = getchar();
+            c = getch();
             if (c == 'q') {
                 game_over = 1;
                 continue;
             }
             if (c == '\x1b') {
-                getchar(); // '['
-                switch (getchar()) {
+                getch(); // '['
+                switch (getch()) {
                     case 'A': c = 'w'; break; // Up
                     case 'B': c = 's'; break; // Down
                     case 'C': c = 'd'; break; // Right
@@ -169,8 +188,6 @@ int main() {
             }
         }
     }
-
-    disable_raw_mode();
     return 0;
 }
 
@@ -183,6 +200,7 @@ void load_maps() {
     }
     int s = 0, r = 0;
     char line[MAP_WIDTH + 2]; // 버퍼 크기는 MAP_WIDTH에 따라 자동 조절됨
+
     while (s < MAX_STAGES && fgets(line, sizeof(line), file)) {
         if ((line[0] == '\n' || line[0] == '\r') && r > 0) {
             s++;
@@ -191,8 +209,12 @@ void load_maps() {
         }
         if (r < MAP_HEIGHT) {
             line[strcspn(line, "\n\r")] = 0;
-            strncpy(map[s][r], line, MAP_WIDTH + 1);
-            r++;
+            
+            if (r < MAP_HEIGHT) {
+                line[strcspn(line, "\n\r")] = 0;
+                strncpy(map[s][r], line, MAP_WIDTH + 1);
+                r++;
+            }
         }
     }
     fclose(file);
@@ -224,7 +246,9 @@ void init_stage() {
 
 // 게임 화면 그리기
 void draw_game() {
-    clrscr(); // printf("\x1b[2J\x1b[H");에서 Windows도 호환되게
+    //clrscr(); // printf("\x1b[2J\x1b[H");에서 Windows도 호환되게
+    printf("\033[H"); //플리커링 방지 >> clrscr를 호출하는 대신 커서만 맨 앞으로 이동시켜서 다시 덮어서 그려버리기
+
     printf("Stage: %d | Score: %d\n", stage + 1, score);
     printf("조작: ← → (이동), ↑ ↓ (사다리), Space (점프), q (종료)\n");
 
@@ -399,14 +423,12 @@ int title(){
         textcolor(1);
         printf("================================================\n");
 
-        // raw mode 이용하여 단일 키 입력 받기(kbhit 활용)
-        enable_raw_mode();
         // 키 입력이 있을 때까지 대기
         while (!kbhit()) usleep(1000);
         // 입력된 키 가져오기
-        choice = getchar();
-        // 터미널 설정 원래대로 되돌림
-        disable_raw_mode();
+        choice = getch();
+
+        cleanBuf(); //입력버퍼는 지우기
 
         // 입력된 문자에 따른 게임 분기 처리
         // 1 선택 시 openingUI 보여준 후 메인 함수로 1을 반환하여 게임 루프 시작하도록 지시
@@ -454,6 +476,6 @@ void openingUI() {
 
     printf("================================================\n");
     textcolor(0); // 기본값으로 초기화
-    getchar();
+    getch();
 }
 
