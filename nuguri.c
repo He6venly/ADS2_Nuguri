@@ -125,6 +125,7 @@ void check_collisions();
 void textcolor(int color);
 int title();
 void openingUI();
+void gameoverUI();
 void restart_game(int *game_over);
 void cleanBuf();
 //버퍼비우기용
@@ -146,6 +147,8 @@ int main() {
 
     load_maps();
     init_stage();
+
+    clrscr();
 
     char c = '\0';
     int game_over = 0;
@@ -478,10 +481,48 @@ void openingUI() {
     getch();
 }
 
+void gameoverUI() {
+    clrscr();
+    textcolor(1);
+
+    printf("        ____                        ____   \n");
+    printf("       /    \\                     /     \\ \n");
+    printf("      /      \\                   /       \\  \n");
+    printf("================================================\n");
+
+    printf("\n");
+    textcolor(0);
+
+    printf("          ████     ████   █    █  ██████ \n");
+    printf("         █        █    █  ██  ██  █            \n");
+    printf("         █        ██████  █ ██ █  ██████       \n");
+    printf("         █  ████  █    █  █    █  █            \n");
+    printf("          ████ █  █    █  █    █  ██████       \n");
+
+    printf("\n");
+
+    printf("       ████   █      █  ██████  ██████        \n");
+    printf("      █    █   █    █   █       █     █         \n");
+    printf("      █    █   █    █   ██████  ██████          \n");
+    printf("      █    █    █  █    █       █    █            \n");
+    printf("       ████      ██     ██████  █     █   █ █ █      \n");
+
+    printf("\n");
+
+    printf("                              최종 점수: %d \n", score);
+    printf("                              RESTART? (Y/N) \n");
+
+    printf("\n");
+    textcolor(1);
+
+    printf("================================================\n");
+    textcolor(0);
+}
+
 void restart_game(int *game_over) { //여기도 game_over포인터 받아서
     char re;
 
-    clrscr(); //여기에 재시작 ui
+    gameoverUI();
 
      // 키 입력이 있을 때까지 대기
     while (!kbhit()) usleep(1000);
@@ -491,11 +532,14 @@ void restart_game(int *game_over) { //여기도 game_over포인터 받아서
     cleanBuf(); //입력버퍼는 지우기
 
     if (re == 'y' || re == 'Y') { //y/Y 입력시 재시작
-    life = 3;
-    score = 0;
-    stage = 0;
-    init_stage();
-    } else { //종료
-    *game_over = 1;
+        life = 3;
+        score = 0;
+        stage = 0;
+        init_stage();
+
+        clrscr();
+    } 
+    else { //종료
+        *game_over = 1;
     }
 }
