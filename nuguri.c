@@ -87,6 +87,7 @@ char map[MAX_STAGES][MAP_HEIGHT][MAP_WIDTH + 1];
 int player_x, player_y;
 int stage = 0;
 int score = 0;
+int life = 3;
 
 // 플레이어 상태
 int is_jumping = 0;
@@ -107,7 +108,7 @@ void enable_raw_mode();
 void load_maps();
 void init_stage();
 void draw_game();
-void update_game(char input);
+void update_game(char input, int *game_over);
 void move_player(char input);
 void move_enemies();
 void check_collisions();
@@ -151,7 +152,7 @@ int main() {
             c = '\0';
         }
 
-        update_game(c);
+        update_game(c, &game_over);
         draw_game();
         usleep(90000);
 
@@ -260,10 +261,10 @@ void draw_game() {
 }
 
 // 게임 상태 업데이트
-void update_game(char input) {
+void update_game(char input, int *game_over) {
     move_player(input);
     move_enemies();
-    check_collisions();
+    check_collisions(game_over);
 }
 
 // 플레이어 이동 로직
@@ -337,11 +338,16 @@ void move_enemies() {
 }
 
 // 충돌 감지 로직
-void check_collisions() {
+void check_collisions(int *game_over) {
     for (int i = 0; i < enemy_count; i++) {
         if (player_x == enemies[i].x && player_y == enemies[i].y) {
             score = (score > 50) ? score - 50 : 0;
-            init_stage();
+            life--;
+            if (life > 0) { //목숨 남았으면
+                init_stage(); 
+            } else {
+                *game_over = 1;
+            }
             return;
         }
     }
