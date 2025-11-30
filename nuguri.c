@@ -73,11 +73,10 @@ int getch() {
 }
 
 void Beep(int frequency, int duration){
-    // \033[10;num]: 주파수 설정
-    // \033[11;num]: 지속시간 설정
-    printf("\033[10;%d]\033[11;%d]\a", frequency, duration);
+    (void)frequency;
+    printf("\a");
     fflush(stdout);
-    usleep(duration*1000);
+    usleep(duration*1700);
 }
 
 #else
@@ -599,7 +598,7 @@ void gameclearUI(int final_score){ // score를 인수로 받기 위해 int score
 /*
 SOUND 모음
 Beep 함수는 (Frequency, Duration)을 인자로 받는데, Frequency의 경우 소리의 높낮이를 결정하는 요소로, 클수록 음이 높다. Duration의 경우는 이 소리를 어느정도 이어지게 할 지 정하는데, 단위는 ms이다.(1000ms=1s)
-이 Beep 함수는 <windows.h>에 있다. 따라서 Linux용에서는 따로 만들어줘야 함. 그리고 소리가 끝나고 다음 라인으로 넘어가기 때문에, 리눅스에도 마찬가지로 딜레이를 넣을 필요가 있다.
+이 Beep 함수는 <windows.h>에 있다. 따라서 Linux용에서는 따로 만들어줘야 함. 그리고 소리가 끝나고 다음 라인(코드)으로 넘어가기 때문에, 리눅스에도 마찬가지로 딜레이를 넣을 필요가 있다. 마지막으로 리눅스에서는 Frequencey나 Duration 같은 기능은 내부 라이브러리로는 제어할 수 없어서 윈도우의 형식만 가져옴.
 */
 
 // GAME OVER 됐을 때의 사운드
