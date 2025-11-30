@@ -123,7 +123,7 @@ void draw_game();
 void update_game(char input, int *game_over); //game_over 변수 포인터 추가
 void move_player(char input);
 void move_enemies();
-void update_game(char input, int *game_over); //game_over 변수 포인터 추가
+void check_collisions(int *game_over);
 void textcolor(int color);
 int title();
 void openingUI();
