@@ -125,6 +125,7 @@ void check_collisions();
 void textcolor(int color);
 int title();
 void openingUI();
+void gameoverUI();
 void restart_game(int *game_over);
 void cleanBuf();
 //버퍼비우기용
@@ -369,6 +370,7 @@ void check_collisions(int *game_over) { //포인터 받아서
             if (life > 0) { //목숨 남았으면 맵 초기화
                 init_stage();
             } else { //아니면(게임오버면) game_over = 1
+                gameoverUI(); // gmaeoverUI 호출(생명력이 0 이하인 경우)
                 restart_game(game_over); //check_collisions 안에 구현하면 복잡할 거 같아서 따로 restart_game함수 구현
             }
             return; //적과 충돌하면 코인 충돌은 돌아가면 안되서 return으로 종료
@@ -478,10 +480,69 @@ void openingUI() {
     getch();
 }
 
+void gameoverUI() {
+    clrscr();
+    textcolor(1);
+
+    printf("        ____                        ____   \n");
+    printf("       /    \\                     /     \\ \n");
+    printf("      /      \\                   /       \\  \n");
+    printf("================================================\n");
+
+    printf("\n");
+    textcolor(0);
+
+    printf("          ████     ████   █    █  ██████ \n");
+    printf("         █        █    █  ██  ██  █            \n");
+    printf("         █        ██████  █ ██ █  ██████       \n");
+    printf("         █  ████  █    █  █    █  █            \n");
+    printf("          ████ █  █    █  █    █  ██████       \n");
+
+    printf("\n");
+
+    printf("       ████   █      █  ██████  ██████        \n");
+    printf("      █    █   █    █   █       █     █         \n");
+    printf("      █    █   █    █   ██████  ██████          \n");
+    printf("      █    █    █  █    █       █    █            \n");
+    printf("       ████      ██     ██████  █     █   █ █ █      \n");
+
+    printf("\n");
+
+    printf("                    최종 점수: %d\n", score);
+
+    printf("\n");
+    textcolor(1);
+
+    printf("================================================\n");
+    textcolor(0);
+
+    enable_raw_mode();
+    while (!kbhit()) usleep(1000);
+    getchar();
+    disable_raw_mode();
+}
+
 void restart_game(int *game_over) { //여기도 game_over포인터 받아서
     char re;
 
-    clrscr(); //여기에 재시작 ui
+    clrscr(); 
+    textcolor(1);
+
+        printf("       ____                        ____   \n");
+        printf("      /    \\                     /     \\ \n");
+        printf("     /      \\                   /       \\  \n");
+        printf("================================================\n");
+
+        printf("\n");
+        textcolor(0);
+
+        printf("\n");
+        printf("                  RESTART? (Y/N)                 \n");
+
+        printf("\n");
+        textcolor(1);
+        printf("================================================\n");
+        textcolor(0);
 
      // 키 입력이 있을 때까지 대기
     while (!kbhit()) usleep(1000);
@@ -491,11 +552,12 @@ void restart_game(int *game_over) { //여기도 game_over포인터 받아서
     cleanBuf(); //입력버퍼는 지우기
 
     if (re == 'y' || re == 'Y') { //y/Y 입력시 재시작
-    life = 3;
-    score = 0;
-    stage = 0;
-    init_stage();
-    } else { //종료
-    *game_over = 1;
+        life = 3;
+        score = 0;
+        stage = 0;
+        init_stage();
+    } 
+    else { //종료
+        *game_over = 1;
     }
 }
