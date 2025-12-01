@@ -127,10 +127,10 @@ void enable_raw_mode();
 void load_maps();
 void init_stage();
 void draw_game();
-void update_game(char input, int *game_over); //game_over 변수 포인터 추가
-void move_player(char input);
+void update_game(char input, int *game_over); //game_over 변수 포인터 추가, 점프상태 변수 추가
+void move_player(char input, int *game_over);
 void move_enemies();
-void check_collisions(int *game_over);
+void check_collisions(int x, int y, int *game_over);
 void textcolor(int color);
 int title();
 void openingUI();
@@ -170,25 +170,27 @@ int main() {
 
     while (!game_over && stage < MAX_STAGES) {
         if (kbhit()) {
-            c = getch();
-            if (c == 'q') {
+            while (kbhit()){  //버퍼에 입력 쌓이는데 한 프레임당 kbhit이 입력값 하나만 들고옴 -> 버퍼에 쌓여서 떼도 움직임
+                c = getch();
+            if (c == 'q') { //while문으로 한 프레임에 버퍼 비울때까지 가져와서 입력 안밀림 -> 버퍼에서 읽어와서 c에 계속 덮어쓴다고 생각
                 game_over = 1;
                 continue;
             }
             if (c == '\x1b') {
                 getch(); // '['
-                switch (getch()) {
+                switch (getch()) { //다른 키 입력할 때 define A B C D 해서 하는 거 같은데 화살표 구현떄문에 남긴건가
                     case 'A': c = 'w'; break; // Up
                     case 'B': c = 's'; break; // Down
                     case 'C': c = 'd'; break; // Right
                     case 'D': c = 'a'; break; // Left
                 }
             }
+            }
         } else {
             c = '\0';
         }
 
-        update_game(c, &game_over); //인자로 주소값 넘겨줌
+        update_game(c, &game_over); //인자로 주소값 넘겨줌, 점프했는지 안했는지 상태 넘겨줌
         draw_game();
         usleep(90000);
 
@@ -265,7 +267,14 @@ void draw_game() {
     //clrscr(); // printf("\x1b[2J\x1b[H");에서 Windows도 호환되게
     printf("\033[H"); //플리커링 방지 >> clrscr를 호출하는 대신 커서만 맨 앞으로 이동시켜서 다시 덮어서 그려버리기
 
-    printf("Stage: %d | Score: %d\n", stage + 1, score);
+    printf("Stage: %d | Score: %d | Life: ", stage + 1, score);
+    for (int i = 0; i < life; i++) {
+        printf("♥ ");
+    }
+    for (int i = 0; i < 3 - life; i++) {
+        printf("  ");
+    }
+    printf("\n");
     printf("조작: ← → (이동), ↑ ↓ (사다리), Space (점프), q (종료)\n");
 
     char display_map[MAP_HEIGHT][MAP_WIDTH + 1];
@@ -301,14 +310,14 @@ void draw_game() {
 }
 
 // 게임 상태 업데이트
-void update_game(char input, int *game_over) { //메인에서 넘겨준 주소값 가르키는 포인터
-    move_player(input);
+void update_game(char input, int *game_over) { //메인에서 넘겨준 주소값 가르키는 포인터, 점프상태 추가
+    move_player(input, game_over);
     move_enemies();
-    check_collisions(game_over); //포인터를 check_collisions에 넘김
+    check_collisions(player_x, player_y, game_over); //포인터를 check_collisions에 넘김 ->점프로직 사이검사때문에 플레이어 x, y값 추가
 }
 
 // 플레이어 이동 로직
-void move_player(char input) {
+void move_player(char input, int *game_over) {
     int prev_x = player_x, prev_y = player_y;
     int moved_by_input = 0; // 키보드를 눌렀는지 확인하는 변수
     int next_x = player_x, next_y = player_y;
@@ -343,8 +352,9 @@ void move_player(char input) {
             player_y = next_y;
             is_jumping = 0;
             velocity_y = 0;
+            check_collisions(player_x, player_y, game_over); //사다리 이동중 충돌 체크
         }
-    } 
+    }
     else {
         if (is_jumping) {
             next_y = player_y + velocity_y;
@@ -352,6 +362,7 @@ void move_player(char input) {
 
             if (velocity_y < 0) { //위로 올라갈 때
                 for (int k = -1; k >= velocity_y; k--) { //위로 올라가는 속도(한 번에 이동하는 거리만큼) 크기만큼 k값 하나씩 감소하면서 사이 검사
+                    check_collisions(player_x, player_y + k, game_over); //현재 플레이어 x, y값 받아서 검사하던걸 y + k로 변경해 사이에 빈 공간도 전부 검사
                     if (player_y + k >= 0 && map[stage][player_y + k][player_x] == '#') { //플레이어 위치에서 점프 높이만큼 증가하다가 벽 감지하면
                     player_y = player_y + k + 1; //해당 벽 밑으로 위치 조정
                     velocity_y = 0; //속도 0
@@ -363,6 +374,7 @@ void move_player(char input) {
             }else { //점프 눌렀을 때 올라가는 경우가 아니면 -> 떨어질 때
                 if (velocity_y > 0) { //떨어지는 속도가 빨라서 중간에 벽을 건너뛰었는지 검사문, 아래로 낙하하고 있을 때
                     for (int k = 1; k <= velocity_y; k++) { //가는 길목(k)에 벽(#)이 있거나 바닥, 떨어지는중이면 한 번에 이동하는 칸만큼 반복
+                        check_collisions(player_x, player_y + k, game_over);
                         if (player_y + k <= MAP_HEIGHT && map[stage][player_y + k][player_x] == '#') { //이동값이 맵 바닥보다 작고(=맵 안)플레이어 y에 k만큼 더한게 벽이면
                             player_y = player_y + k - 1; //벽 바로 위에서 멈춤 -> player_y + k가 벽 위치라 거기서 -1만큼하면 벽 위
                             is_jumping = 0; //착지 처리
@@ -430,9 +442,9 @@ void move_enemies() {
 }
 
 // 충돌 감지 로직
-void check_collisions(int *game_over) { //포인터 받아서
+void check_collisions(int x, int y, int *game_over) { //포인터 받아서 -> 원래 전역변수 player_x, player_y에 바로 접근해 검사하던 거를 점프때 player_x, player_y + k값 받아서 검사 가능하게 변경
     for (int i = 0; i < enemy_count; i++) {
-        if (player_x == enemies[i].x && player_y == enemies[i].y) { //적과 겹치면
+        if (x == enemies[i].x && y == enemies[i].y) { //적과 겹치면
             hit_enemy_sound();
             score = (score > 50) ? score - 50 : 0;
             life--; //목숨 -1
@@ -446,7 +458,7 @@ void check_collisions(int *game_over) { //포인터 받아서
         }
     }
     for (int i = 0; i < coin_count; i++) {
-        if (!coins[i].collected && player_x == coins[i].x && player_y == coins[i].y) {
+        if (!coins[i].collected && x == coins[i].x && y == coins[i].y) {
             coins[i].collected = 1;
             score += 20;
             get_coin_sound();
