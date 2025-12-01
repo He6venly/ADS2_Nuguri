@@ -140,6 +140,9 @@ void restart_game(int *game_over);
 void gameclearUI(int final_score);
 void cleanBuf();
 void game_over_sound();
+void move_sound();
+void get_coin_sound();
+void hit_enemy_sound();
 //버퍼비우기용
 void cleanBuf() {
 	int c;
@@ -307,6 +310,8 @@ void update_game(char input, int *game_over) { //메인에서 넘겨준 주소�
 
 // 플레이어 이동 로직
 void move_player(char input) {
+    int prev_x = player_x, prev_y = player_y;
+    int moved_by_input = 0; // 키보드를 눌렀는지 확인하는 변수
     int next_x = player_x, next_y = player_y;
     char floor_tile = (player_y + 1 < MAP_HEIGHT) ? map[stage][player_y + 1][player_x] : '#';
     char current_tile = map[stage][player_y][player_x];
@@ -314,14 +319,20 @@ void move_player(char input) {
     on_ladder = (current_tile == 'H');
 
     switch (input) {
-        case 'a': next_x--; break;
-        case 'd': next_x++; break;
-        case 'w': if (on_ladder) next_y--; break;
-        case 's': if (on_ladder && (player_y + 1 < MAP_HEIGHT) && map[stage][player_y + 1][player_x] != '#') next_y++; break;
+        case 'a': next_x--; moved_by_input = 1; break;
+        case 'd': next_x++; moved_by_input = 1; break;
+        case 'w': if (on_ladder) next_y--; moved_by_input = 1; break;
+        case 's':
+            if (on_ladder && (player_y + 1 < MAP_HEIGHT) && map[stage][player_y + 1][player_x] != '#'){
+                next_y++;
+                moved_by_input = 1;
+            }
+            break;
         case ' ':
             if (!is_jumping && (floor_tile == '#' || on_ladder)) {
                 is_jumping = 1;
                 velocity_y = -2;
+                moved_by_input = 1;
             }
             break;
     }
@@ -358,7 +369,9 @@ void move_player(char input) {
             }
         }
     }
-    
+    if (moved_by_input && (player_x != prev_x || player_y != prev_y)) { // 플레이어의 위치가 변경되었고 키를 같이 눌러야(중력으로 인해 떨어질 경우에도 마찬가지로 플레이어 위치가 변경되기 때문에) 움직임 소리가 나도록 함.
+        move_sound();
+    }
     if (player_y >= MAP_HEIGHT) init_stage();
 }
 
@@ -379,6 +392,7 @@ void move_enemies() {
 void check_collisions(int *game_over) { //포인터 받아서
     for (int i = 0; i < enemy_count; i++) {
         if (player_x == enemies[i].x && player_y == enemies[i].y) { //적과 겹치면
+            hit_enemy_sound();
             score = (score > 50) ? score - 50 : 0;
             life--; //목숨 -1
             if (life > 0) { //목숨 남았으면 맵 초기화
@@ -394,6 +408,7 @@ void check_collisions(int *game_over) { //포인터 받아서
         if (!coins[i].collected && player_x == coins[i].x && player_y == coins[i].y) {
             coins[i].collected = 1;
             score += 20;
+            get_coin_sound();
         }
     }
 }
@@ -609,3 +624,18 @@ void game_over_sound() {
     }
     // 소리가 높은 곳에서 낮은 곳으로 내려가면서 0.03초 동안 내도록 만들어 옛날 레트로 게임의 효과음처럼 만들었다.
 }
+
+void move_sound(){
+    Beep(300, 10);
+} // move_player 함수에서 사용된다. 움직임+키보드 입력 시 소리가 나게 했으며, 특별하지 않은 소리로 하여 거슬림 없는 소리 정도로 만들었다. 자세한 로직 설명은 함수에 있다.
+
+void get_coin_sound(){
+    for (int f = 1800; f <= 2000; f += 100) {
+        Beep(f, 30);
+    }
+} // check_collisions 함수에서 사용된다. 코인과 충돌 감지시 소리를 나게 했으며, 윈도우의 경우 경쾌한 소리를 주었다. 움직임과 다르게 3번 소리를 주게 해서 다르게 표현했다.
+
+void hit_enemy_sound(){
+    Beep(800, 40);
+    Beep(400, 60);
+}  // check_collisions 함수에서 사용된다. 적과 충돌 감지시 소리를 나게 했으며, 낮은 음으로 2번 소리를 주게 해서 다르게 표현했다.
