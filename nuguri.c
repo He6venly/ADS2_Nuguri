@@ -199,7 +199,7 @@ int main() {
                 init_stage();
             } else {
                 game_over = 1;
-                
+                clrscr(); //UI화면 출력 찌꺼기 방지 위해 호출전 한번만 클리어
                 gameclearUI(score); // gameclearUI 함수 호출
             }
         }
@@ -385,9 +385,11 @@ void move_player(char input) {
             }
         }
     }
+    //사운드 검사
     if (moved_by_input && (player_x != prev_x || player_y != prev_y)) { // 플레이어의 위치가 변경되었고 키를 같이 눌러야(중력으로 인해 떨어질 경우에도 마찬가지로 플레이어 위치가 변경되기 때문에) 움직임 소리가 나도록 함.
         move_sound();
     }
+    //가속도 검사?
     if (player_y >= MAP_HEIGHT) { //가속 너무 높은 상태로 바닥으로 직행하면 이전 코드는 바로 스테이지가 초기화됨 -> 낙사 로직인지모르겠는데 일단 바닥 위로 이동 처리
         player_y = MAP_HEIGHT - 2;
         is_jumping = 0;
@@ -398,13 +400,32 @@ void move_player(char input) {
 
 // 적 이동 로직
 void move_enemies() {
+    //공중에 떠있는 적 이동로직 추가하기
+    //현재 로직이 지금 다음칸 발 밑이 비어있으면 (공백이면) 뒤로 돌아가는 로직. >> 땅 위에 있는 경우에만 낭떠러지인지 검사하는 식으로 하면 될듯.
+
     for (int i = 0; i < enemy_count; i++) {
         int next_x = enemies[i].x + enemies[i].dir;
-        if (next_x < 0 || next_x >= MAP_WIDTH || map[stage][enemies[i].y][next_x] == '#' || (enemies[i].y + 1 < MAP_HEIGHT && map[stage][enemies[i].y + 1][next_x] == ' ')) {
+
+        //기본 충돌체크는 그대로
+        if (next_x < 0 || next_x >= MAP_WIDTH || map[stage][enemies[i].y][next_x] == '#') { // ||로 y축 검사하는거 아래로 옮기기
             enemies[i].dir *= -1;
-        } else {
-            enemies[i].x = next_x;
+            continue;
         }
+        
+        //내가 땅위인지 확인. 내 발밑이 #이고 MAP HEIGHT를 벗어나지 않으면 땅위
+        int isGround = enemies[i].y + 1 < MAP_HEIGHT && map[stage][enemies[i].y + 1][next_x] == '#';
+
+
+        //isGround가 1이면(True면) == 땅바닥에 있는 몬스터면 원래있던 낭떠러지 검사 및 뒤로 돌아가는 로직 그대로 수행
+        if(isGround) {
+            if((enemies[i].y + 1 < MAP_HEIGHT && map[stage][enemies[i].y + 1][next_x] == ' ')) {
+                enemies[i].dir *= -1;
+                continue;
+            }
+        }
+
+        //땅위 아니면 공백이여도 자유롭게 이동
+        enemies[i].x = next_x;
     }
 }
 
@@ -467,11 +488,12 @@ int title(){
         printf("                  0. Exit                        \n");
 
         printf("\n");
-        printf("Ready to play? (1/0): ");
 
-        printf("\n");
         textcolor(1);
         printf("================================================\n");
+        textcolor(0);
+
+        printf("Ready to play? (1/0): ");
 
         // 키 입력이 있을 때까지 대기
         while (!kbhit()) usleep(1000);
@@ -556,15 +578,15 @@ void gameoverUI(int final_score) {
     printf("       ████      ██     ██████  █     █   █ █ █      \n");
 
     printf("\n");
-
     printf("                              최종 점수: %d \n", final_score);
-    printf("                              RESTART? (Y/N) \n");
-
     printf("\n");
     textcolor(1);
-
     printf("================================================\n");
     textcolor(0);
+
+     printf("                              RESTART? (Y/N) : ");
+
+
 }
 
 void restart_game(int *game_over) { //여기도 game_over포인터 받아서
@@ -577,8 +599,6 @@ void restart_game(int *game_over) { //여기도 game_over포인터 받아서
     // 입력된 키 가져오기
     re = getch();
 
-    cleanBuf(); //입력버퍼는 지우기
-
     if (re == 'y' || re == 'Y') { //y/Y 입력시 재시작
         life = 3;
         score = 0;
@@ -586,7 +606,8 @@ void restart_game(int *game_over) { //여기도 game_over포인터 받아서
         init_stage();
 
         clrscr();
-    } 
+    }
+    
     else { //종료
         *game_over = 1;
     }
