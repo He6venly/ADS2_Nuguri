@@ -72,6 +72,13 @@ int getch() {
     return getchar();
 }
 
+void Beep(int frequency, int duration){
+    (void)frequency;
+    printf("\a");
+    fflush(stdout);
+    usleep(duration*1700);
+}
+
 #else
     #error "Unsupported platform!" // 현재는 Windows, MacOS, Linux를 제외한 다른 OS는 지원하지 않기 때문에 이외의 OS로 실행 시 에러를 뱉음.
 #endif
@@ -131,11 +138,13 @@ void gameoverUI(int final_score);
 void restart_game(int *game_over);
 void gameclearUI(int final_score);
 void cleanBuf();
+void game_over_sound();
 //버퍼비우기용
 void cleanBuf() {
 	int c;
 	while ((c = getchar()) != '\n' && c != EOF);
 }
+
 
 int main() {
     srand(time(NULL));
@@ -374,6 +383,7 @@ void check_collisions(int *game_over) { //포인터 받아서
             if (life > 0) { //목숨 남았으면 맵 초기화
                 init_stage();
             } else { //아니면(게임오버면) game_over = 1
+                game_over_sound();
                 restart_game(game_over); //check_collisions 안에 구현하면 복잡할 거 같아서 따로 restart_game함수 구현
             }
             return; //적과 충돌하면 코인 충돌은 돌아가면 안되서 return으로 종료
@@ -582,4 +592,19 @@ void gameclearUI(int final_score){ // score를 인수로 받기 위해 int score
     printf("================================================\n");
     textcolor(0);
     getch();
+}
+
+
+/*
+SOUND 모음
+Beep 함수는 (Frequency, Duration)을 인자로 받는데, Frequency의 경우 소리의 높낮이를 결정하는 요소로, 클수록 음이 높다. Duration의 경우는 이 소리를 어느정도 이어지게 할 지 정하는데, 단위는 ms이다.(1000ms=1s)
+이 Beep 함수는 <windows.h>에 있다. 따라서 Linux용에서는 따로 만들어줘야 함. 그리고 소리가 끝나고 다음 라인(코드)으로 넘어가기 때문에, 리눅스에도 마찬가지로 딜레이를 넣을 필요가 있다. 마지막으로 리눅스에서는 Frequencey나 Duration 같은 기능은 내부 라이브러리로는 제어할 수 없어서 윈도우의 형식만 가져옴.
+*/
+
+// GAME OVER 됐을 때의 사운드
+void game_over_sound() {
+    for (int f = 2000; f >= 100; f -= 100) {
+        Beep(f, 30);
+    }
+    // 소리가 높은 곳에서 낮은 곳으로 내려가면서 0.03초 동안 내도록 만들어 옛날 레트로 게임의 효과음처럼 만들었다.
 }
