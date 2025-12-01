@@ -73,11 +73,10 @@ int getch() {
 }
 
 void Beep(int frequency, int duration){
-    // \033[10;num]: 주파수 설정
-    // \033[11;num]: 지속시간 설정
-    printf("\033[10;%d]\033[11;%d]\a", frequency, duration);
+    (void)frequency;
+    printf("\a");
     fflush(stdout);
-    usleep(duration*1000);
+    usleep(duration*1700);
 }
 
 #else
@@ -350,29 +349,50 @@ void move_player(char input) {
         if (is_jumping) {
             next_y = player_y + velocity_y;
             if(next_y < 0) next_y = 0;
-            velocity_y++;
 
-            if (velocity_y < 0 && next_y < MAP_HEIGHT && map[stage][next_y][player_x] == '#') {
-                velocity_y = 0;
-            } else if (next_y < MAP_HEIGHT) {
-                player_y = next_y;
+            if (velocity_y < 0) { //위로 올라갈 때
+                for (int k = -1; k >= velocity_y; k--) { //위로 올라가는 속도(한 번에 이동하는 거리만큼) 크기만큼 k값 하나씩 감소하면서 사이 검사
+                    if (player_y + k >= 0 && map[stage][player_y + k][player_x] == '#') { //플레이어 위치에서 점프 높이만큼 증가하다가 벽 감지하면
+                    player_y = player_y + k + 1; //해당 벽 밑으로 위치 조정
+                    velocity_y = 0; //속도 0
+                    break; //종료
+                    }
+                } // ->검사문에 안걸림 = 벽 없음
+                if (next_y >= 0 && map[stage][next_y][player_x] != '#') player_y = next_y; //따라서 그냥 점프
+                else velocity_y = 0; 
+            }else { //점프 눌렀을 때 올라가는 경우가 아니면 -> 떨어질 때
+                if (velocity_y > 0) { //떨어지는 속도가 빨라서 중간에 벽을 건너뛰었는지 검사문, 아래로 낙하하고 있을 때
+                    for (int k = 1; k <= velocity_y; k++) { //가는 길목(k)에 벽(#)이 있거나 바닥, 떨어지는중이면 한 번에 이동하는 칸만큼 반복
+                        if (player_y + k <= MAP_HEIGHT && map[stage][player_y + k][player_x] == '#') { //이동값이 맵 바닥보다 작고(=맵 안)플레이어 y에 k만큼 더한게 벽이면
+                            player_y = player_y + k - 1; //벽 바로 위에서 멈춤 -> player_y + k가 벽 위치라 거기서 -1만큼하면 벽 위
+                            is_jumping = 0; //착지 처리
+                            velocity_y = 0; //속도 0
+                            break; //종료
+                        } // -> 결론 : 떨어질 때 가속도 붙으면 한번에 여러칸 이동 -> 이동하는 칸 사이만큼 반복하면서 벽 감지하면 벽 위에 멈춤
+                    }
+                } // ->검사문에 안걸림 = 바닥 없음
+                if (is_jumping) player_y = next_y; //점프중이면 그냥 다음 위치로
             }
-            
-            if ((player_y + 1 < MAP_HEIGHT) && map[stage][player_y + 1][player_x] == '#') {
+            if ((player_y + 1 < MAP_HEIGHT) && map[stage][player_y + 1][player_x] == '#') { //바로 한칸 아래가 벽이면 점프끝 -> 없으면 버그날 확률 높음
                 is_jumping = 0;
                 velocity_y = 0;
             }
-        } else {
-            if (floor_tile != '#' && floor_tile != 'H') {
-                 if (player_y + 1 < MAP_HEIGHT) player_y++;
-                 else init_stage();
+            if (is_jumping) velocity_y++; //밑으로 이동하는 것 까지 끝내고 떨어지는 속도 증가
+        }else { //점프중이 아님 -> 중력으로 낙하
+            if (floor_tile != '#' && floor_tile != 'H') { //아래칸 바닥 타일이 벽이나 사라디가 아니면
+                if (player_y + 1 < MAP_HEIGHT) player_y++; //맵 높이보다 작으면 y값 증가시켜 한칸 떨어지게 
+                else init_stage(); //맵 바닥 경계아래로 떨어지려 하면 초기화
             }
         }
     }
     if (moved_by_input && (player_x != prev_x || player_y != prev_y)) { // 플레이어의 위치가 변경되었고 키를 같이 눌러야(중력으로 인해 떨어질 경우에도 마찬가지로 플레이어 위치가 변경되기 때문에) 움직임 소리가 나도록 함.
         move_sound();
     }
-    if (player_y >= MAP_HEIGHT) init_stage();
+    if (player_y >= MAP_HEIGHT) { //가속 너무 높은 상태로 바닥으로 직행하면 이전 코드는 바로 스테이지가 초기화됨 -> 낙사 로직인지모르겠는데 일단 바닥 위로 이동 처리
+        player_y = MAP_HEIGHT - 2;
+        is_jumping = 0;
+        velocity_y = 0;
+    }
 }
 
 
@@ -614,7 +634,7 @@ void gameclearUI(int final_score){ // score를 인수로 받기 위해 int score
 /*
 SOUND 모음
 Beep 함수는 (Frequency, Duration)을 인자로 받는데, Frequency의 경우 소리의 높낮이를 결정하는 요소로, 클수록 음이 높다. Duration의 경우는 이 소리를 어느정도 이어지게 할 지 정하는데, 단위는 ms이다.(1000ms=1s)
-이 Beep 함수는 <windows.h>에 있다. 따라서 Linux용에서는 따로 만들어줘야 함. 그리고 소리가 끝나고 다음 라인으로 넘어가기 때문에, 리눅스에도 마찬가지로 딜레이를 넣을 필요가 있다.
+이 Beep 함수는 <windows.h>에 있다. 따라서 Linux용에서는 따로 만들어줘야 함. 그리고 소리가 끝나고 다음 라인(코드)으로 넘어가기 때문에, 리눅스에도 마찬가지로 딜레이를 넣을 필요가 있다. 마지막으로 리눅스에서는 Frequencey나 Duration 같은 기능은 내부 라이브러리로는 제어할 수 없어서 윈도우의 형식만 가져옴.
 */
 
 // GAME OVER 됐을 때의 사운드
