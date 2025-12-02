@@ -76,7 +76,6 @@ void Beep(int frequency, int duration){
     (void)frequency;
     printf("\a");
     fflush(stdout);
-    usleep(duration*1700);
 }
 
 #else
@@ -119,7 +118,10 @@ int enemy_count = 0;
 Coin coins[MAX_COINS];
 int coin_count = 0;
 
-
+//방향 공중점프용 전역변수 세팅, 지역변수하니까 버그가 자꾸 생김..
+int j_dirction = 0; // 점프중의 방향 지정할 변수 (0 = 제자리 / 1 = 오른쪽 / -1 = 왼쪽으로 설계할 예정, 왼쪽은 x좌표 -1해야하니까 이렇게 구성)
+int now_direction = 0; //방금전까지 향하던 방향(입력키?) 저장해둘 변수 (0 = 제자리 / 1 = 오른쪽 / -1 = 왼쪽 )
+int stopSecond = 0; // 입력 없이 제자리일 경우 체크하기 위해 진짜 짧은 시간동안 입력 없으면 멈추게 하기 위한 임시변수
 
 // 함수 선언
 void disable_raw_mode();
@@ -130,7 +132,7 @@ void draw_game();
 void update_game(char input, int *game_over); //game_over 변수 포인터 추가, 점프상태 변수 추가
 void move_player(char input, int *game_over);
 void move_enemies();
-void check_collisions(int x, int y, int *game_over);
+void check_collisions(int x, int y, int *game_over, int enemyCheck);
 void textcolor(int color);
 int title();
 void openingUI();
@@ -142,11 +144,6 @@ void game_over_sound();
 void move_sound();
 void get_coin_sound();
 void hit_enemy_sound();
-//버퍼비우기용
-void cleanBuf() {
-	int c;
-	while ((c = getchar()) != '\n' && c != EOF);
-}
 
 
 int main() {
@@ -171,7 +168,19 @@ int main() {
     while (!game_over && stage < MAX_STAGES) {
         if (kbhit()) {
             while (kbhit()){  //버퍼에 입력 쌓이는데 한 프레임당 kbhit이 입력값 하나만 들고옴 -> 버퍼에 쌓여서 떼도 움직임
-                c = getch();
+                int temp = getch(); // 입력을 임시로 저장해두고
+                
+                // 키가 자꾸 씹히니까 일단 임시 저장한게 왼쪽 오른쪽 이동이면 바로 공중점프 로직에 반영
+                if (temp == 'a') {
+                    now_direction = -1;
+                    stopSecond = 0;
+                } else if (temp == 'd') {
+                    now_direction = 1;
+                    stopSecond = 0;
+                }
+                //c = getch() 원래 로직이니 temp를 그냥 넣어주기
+                c = temp;
+
             if (c == 'q') { //while문으로 한 프레임에 버퍼 비울때까지 가져와서 입력 안밀림 -> 버퍼에서 읽어와서 c에 계속 덮어쓴다고 생각
                 game_over = 1;
                 continue;
@@ -313,7 +322,7 @@ void draw_game() {
 void update_game(char input, int *game_over) { //메인에서 넘겨준 주소값 가르키는 포인터, 점프상태 추가
     move_player(input, game_over);
     move_enemies();
-    check_collisions(player_x, player_y, game_over); //포인터를 check_collisions에 넘김 ->점프로직 사이검사때문에 플레이어 x, y값 추가
+    check_collisions(player_x, player_y, game_over, 1); //포인터를 check_collisions에 넘김 ->점프로직 사이검사때문에 플레이어 x, y값 추가
 }
 
 // 플레이어 이동 로직
@@ -323,15 +332,39 @@ void move_player(char input, int *game_over) {
     int next_x = player_x, next_y = player_y;
     char floor_tile = (player_y + 1 < MAP_HEIGHT) ? map[stage][player_y + 1][player_x] : '#';
     char current_tile = map[stage][player_y][player_x];
-
     on_ladder = (current_tile == 'H');
+
+    int isBottomLadder = (player_y + 1 < MAP_HEIGHT && map[stage][player_y + 1][player_x] == 'H'); // 지금 내가있는 바닥(#) 밑이 사다리임? 을 저장하는 변수
+
+    /* 
+        12-02 공중에서 이동하는 관성 로직이 있어야 할 듯
+        실제 너구리 게임을 보니, 점프 중간엔 방향을 바꿀 수 없고 오른쪽, 왼쪽 점프, 제자리 점프만 존재.
+        그러면 점프 시점에 오른/왼쪽 키 입력이 있는지 체크하고 점프입력이 들어올때 오른쪽 왼쪽 키가 입력중이라면 해당 방향으로 1칸씩 자동으로 이동하게 하면 될 듯.
+        중간에 떼도 해당 방향 점프를 취소할 수 없고, 벽에 부딛히거나 땅에 착지하면 관성을 다시 0으로 만드는 식으로 구현.
+    */
+    
+    // 0 제자리 1 오른쪽 2 왼쪽
+    if(input == 'a') {
+        now_direction = -1; //왼쪽, 좌표 -1해야하니까
+        stopSecond = 0; //입력이니까 0으로 초기화
+
+    } else if (input == 'd') {
+        now_direction = 1; //오른쪽, 좌표 +1해야하니
+        stopSecond = 0; //이하동문
+
+    } else if (input == '\0') {  //입력이 없다면 (상시상태, main에서 c가 입력이 없다면 \0으로 처리되기에 이렇게 검사)
+        stopSecond++; //main에서 usleep(90000), 즉 0.09초마다 화면 업데이트 중이니, 0.09초마다 stopSecond가 1씩 올라가는 구조.
+        if(stopSecond > 2) { // 다시 말해 1보다 크면 == 입력없이 0.1초 지나면 제자리점프
+            now_direction = 0; // >> 방향 정지로 설정
+        }
+    }
 
     switch (input) {
         case 'a': next_x--; moved_by_input = 1; break;
         case 'd': next_x++; moved_by_input = 1; break;
         case 'w': if (on_ladder) next_y--; moved_by_input = 1; break;
         case 's':
-            if (on_ladder && (player_y + 1 < MAP_HEIGHT) && map[stage][player_y + 1][player_x] != '#'){
+            if ((on_ladder && (player_y + 1 < MAP_HEIGHT) && map[stage][player_y + 1][player_x] != '#') || isBottomLadder) { //내 밑이 사다리인지도 동시에 체크
                 next_y++;
                 moved_by_input = 1;
             }
@@ -341,59 +374,129 @@ void move_player(char input, int *game_over) {
                 is_jumping = 1;
                 velocity_y = -2;
                 moved_by_input = 1;
+                j_dirction = now_direction; // 점프로직 맨 마지막에 점프 방향 세팅해주기
             }
             break;
     }
 
-    if (next_x >= 0 && next_x < MAP_WIDTH && map[stage][player_y][next_x] != '#') player_x = next_x;
-    
-    if (on_ladder && (input == 'w' || input == 's')) {
+    //>> 그니까 점프 중이 아닐때만 next_x << (키보드 입력)으로 이동. 아닐경우에는 j_direction으로 이동처리
+    if (!is_jumping) {
+        if (next_x >= 0 && next_x < MAP_WIDTH && map[stage][player_y][next_x] != '#') {
+            player_x = next_x;
+
+            check_collisions(player_x, player_y, game_over, 0);
+        }
+    }
+
+
+    //사다리처리 ~~ 바닥이 사다리일때도 추가(12/02)
+    if ((on_ladder || (input == 's' && isBottomLadder)) && (input == 'w' || input == 's')) {
         if(next_y >= 0 && next_y < MAP_HEIGHT && map[stage][next_y][player_x] != '#') {
             player_y = next_y;
             is_jumping = 0;
             velocity_y = 0;
-            check_collisions(player_x, player_y, game_over); //사다리 이동중 충돌 체크
+            check_collisions(player_x, player_y, game_over, 1); //사다리 이동중 충돌 체크, 적 만나면 죽어야함
+            j_dirction = 0;
+            now_direction = 0; //사다리 타면 관련 변수 다 초기화
         }
     }
+    //여기부터 점프 로직 y축검사.
     else {
         if (is_jumping) {
+
+            //기존에 있던 점프처리 (y축검사)
             next_y = player_y + velocity_y;
             if(next_y < 0) next_y = 0;
-
             if (velocity_y < 0) { //위로 올라갈 때
                 for (int k = -1; k >= velocity_y; k--) { //위로 올라가는 속도(한 번에 이동하는 거리만큼) 크기만큼 k값 하나씩 감소하면서 사이 검사
-                    check_collisions(player_x, player_y + k, game_over); //현재 플레이어 x, y값 받아서 검사하던걸 y + k로 변경해 사이에 빈 공간도 전부 검사
                     if (player_y + k >= 0 && map[stage][player_y + k][player_x] == '#') { //플레이어 위치에서 점프 높이만큼 증가하다가 벽 감지하면
-                    player_y = player_y + k + 1; //해당 벽 밑으로 위치 조정
-                    velocity_y = 0; //속도 0
-                    break; //종료
+                        player_y = player_y + k + 1; //해당 벽 밑으로 위치 조정
+                        velocity_y = 0; //속도 0
+                        break; //종료
                     }
+                    check_collisions(player_x, player_y + k, game_over, 1); //위의 충돌검사 y축 이후에 검사하도록 옮김
                 } // ->검사문에 안걸림 = 벽 없음
-                if (next_y >= 0 && map[stage][next_y][player_x] != '#') player_y = next_y; //따라서 그냥 점프
-                else velocity_y = 0; 
-            }else { //점프 눌렀을 때 올라가는 경우가 아니면 -> 떨어질 때
+
+
+                if (next_y >= 0 && map[stage][next_y][player_x] != '#') {
+                    player_y = next_y; //따라서 그냥 점프
+                } else {
+                    velocity_y = 0;
+                }
+
+            } else { //점프 눌렀을 때 올라가는 경우가 아니면 -> 떨어질 때
                 if (velocity_y > 0) { //떨어지는 속도가 빨라서 중간에 벽을 건너뛰었는지 검사문, 아래로 낙하하고 있을 때
                     for (int k = 1; k <= velocity_y; k++) { //가는 길목(k)에 벽(#)이 있거나 바닥, 떨어지는중이면 한 번에 이동하는 칸만큼 반복
-                        check_collisions(player_x, player_y + k, game_over);
+
+                        /* 여기있던 땅 검사 로직 순서 변경했음 */
+
                         if (player_y + k <= MAP_HEIGHT && map[stage][player_y + k][player_x] == '#') { //이동값이 맵 바닥보다 작고(=맵 안)플레이어 y에 k만큼 더한게 벽이면
                             player_y = player_y + k - 1; //벽 바로 위에서 멈춤 -> player_y + k가 벽 위치라 거기서 -1만큼하면 벽 위
                             is_jumping = 0; //착지 처리
                             velocity_y = 0; //속도 0
+                            j_dirction = 0; //착지할때 관성 제거해주기
+
+                            check_collisions(player_x, player_y, game_over, 1); // 착지할때 적 있으면 죽어야하니 1
+
                             break; //종료
                         } // -> 결론 : 떨어질 때 가속도 붙으면 한번에 여러칸 이동 -> 이동하는 칸 사이만큼 반복하면서 벽 감지하면 벽 위에 멈춤
+
+                        check_collisions(player_x, player_y + k, game_over, 0); // 그냥 낙하중일때는 코인만 검사하게
                     }
                 } // ->검사문에 안걸림 = 바닥 없음
                 if (is_jumping) player_y = next_y; //점프중이면 그냥 다음 위치로
             }
+
+             /* 
+                12/03 --- 선효
+                점프관성 추가하면서 계속 버그나서 검사로직 순서자체를 변경
+                1. 적 충돌감지보다 벽검사를 먼저하게 순서 변경 
+                2. 대각선 벽 관통 버그 수정을 위해 착지 판정 순서 교체
+                3. wall coner 로직에서 착지할 바닥도 모서리로 인식해서 공중에서 멈추는 버그 발생하여 교체.
+                4. 이렇게 계속 구조를 수정하다보니 x축을 1씩 공중에서 밀어주는 로직 실행 중 사각지대가 계속 발생하여 코인(C)가 관통하여 먹어지지 않는 버그도 발생
+                5. 2중으로 꼼꼼하게 충돌검사를 시행하여 가는 경로 사각지대도 검사해주는 방법을 일단 사용... ㅠㅠ
+            */
+
+            // Y축 처리 다음부터 X축 좌우 점프시 관성으로 이동 검사
+            //대각전용검사추가
+            //제자리가 아니라 점프방향이 존재한다면
+            if (j_dirction != 0) {
+                int jumpNext_X = player_x + j_dirction;
+                // 옆면이 벽임?
+                int isSideWall = (map[stage][player_y][jumpNext_X] == '#');
+                
+
+                //옆면 안 막혔으면 일단 이동
+                if (jumpNext_X >= 0 && jumpNext_X < MAP_WIDTH && !isSideWall) {
+                    player_x = jumpNext_X;
+                    //충돌검사
+                    check_collisions(player_x, player_y, game_over, 1);
+                    
+                    //y+1도 검사해서 예를 들어 3칸 점프한다면 내 머리 바로 위칸(y+1)좌표에 있는 아이템도 먹게 충돌검사 해주기
+                    check_collisions(player_x, player_y + 1, game_over, 0);
+
+                    //이게 맞나 ㅋㅋㅋㅋㅋ 일단 y+2까지 3단으로 검사 (점프력 3이니)
+                    check_collisions(player_x, player_y + 2, game_over, 0);
+                } else {
+                    j_dirction = 0; // 벽에 부딪히면 관성 즉시 정지
+                }
+            }
+
             if ((player_y + 1 < MAP_HEIGHT) && map[stage][player_y + 1][player_x] == '#') { //바로 한칸 아래가 벽이면 점프끝 -> 없으면 버그날 확률 높음
                 is_jumping = 0;
                 velocity_y = 0;
+                j_dirction = 0; //착지할때 관성 제거해주기
             }
             if (is_jumping) velocity_y++; //밑으로 이동하는 것 까지 끝내고 떨어지는 속도 증가
-        }else { //점프중이 아님 -> 중력으로 낙하
+
+        } else { //점프중이 아님 -> 걷는 중간에 중력으로 낙하
             if (floor_tile != '#' && floor_tile != 'H') { //아래칸 바닥 타일이 벽이나 사라디가 아니면
                 if (player_y + 1 < MAP_HEIGHT) player_y++; //맵 높이보다 작으면 y값 증가시켜 한칸 떨어지게 
                 else init_stage(); //맵 바닥 경계아래로 떨어지려 하면 초기화
+
+            //점프관성 제거위해 else 달았음.
+            } else {
+                j_dirction = 0; //착지할때 관성 제거해주기
             }
         }
     }
@@ -442,21 +545,31 @@ void move_enemies() {
 }
 
 // 충돌 감지 로직
-void check_collisions(int x, int y, int *game_over) { //포인터 받아서 -> 원래 전역변수 player_x, player_y에 바로 접근해 검사하던 거를 점프때 player_x, player_y + k값 받아서 검사 가능하게 변경
-    for (int i = 0; i < enemy_count; i++) {
-        if (x == enemies[i].x && y == enemies[i].y) { //적과 겹치면
-            hit_enemy_sound();
-            score = (score > 50) ? score - 50 : 0;
-            life--; //목숨 -1
-            if (life > 0) { //목숨 남았으면 맵 초기화
-                init_stage();
-            } else { //아니면(게임오버면) game_over = 1
-                game_over_sound();
-                restart_game(game_over); //check_collisions 안에 구현하면 복잡할 거 같아서 따로 restart_game함수 구현
+void check_collisions(int x, int y, int *game_over, int enemyCheck) { //포인터 받아서 -> 원래 전역변수 player_x, player_y에 바로 접근해 검사하던 거를 점프때 player_x, player_y + k값 받아서 검사 가능하게 변경
+    /*
+        enemyCheck라는 0,1 T/F표현 변수 추가해서, 충돌 로직 검사할때마다
+        내가 지금 몬스터 충돌까지 생각할지(바닥에 닿을때나 사다리 타있을때 기준)
+        그냥 단순 점프 공중 관성이동(경로)이여서 코인만 검사하면 될지 분기를 정하기 위해 enemyCheck 변수 추가해서
+        이동 로직 함수에서 충돌 검사 함수를 불러 쓸 때마다 몬스터 검사를 할지 안 할지를 0과 1로 제어하는 방식으로 해봤음.
+    */
+    
+    if(enemyCheck) {
+        for (int i = 0; i < enemy_count; i++) {
+            if (x == enemies[i].x && y == enemies[i].y) { //적과 겹치면
+                hit_enemy_sound();
+                score = (score > 50) ? score - 50 : 0;
+                life--; //목숨 -1
+                if (life > 0) { //목숨 남았으면 맵 초기화
+                    init_stage();
+                } else { //아니면(게임오버면) game_over = 1
+                    game_over_sound();
+                    restart_game(game_over); //check_collisions 안에 구현하면 복잡할 거 같아서 따로 restart_game함수 구현
+                }
+                return; //적과 충돌하면 코인 충돌은 돌아가면 안되서 return으로 종료
             }
-            return; //적과 충돌하면 코인 충돌은 돌아가면 안되서 return으로 종료
         }
     }
+
     for (int i = 0; i < coin_count; i++) {
         if (!coins[i].collected && x == coins[i].x && y == coins[i].y) {
             coins[i].collected = 1;
@@ -512,7 +625,7 @@ int title(){
         // 입력된 키 가져오기
         choice = getch();
 
-        cleanBuf(); //입력버퍼는 지우기
+        while(kbhit()) getch(); //입력키 처리
 
         // 입력된 문자에 따른 게임 분기 처리
         // 1 선택 시 openingUI 보여준 후 메인 함수로 1을 반환하여 게임 루프 시작하도록 지시
@@ -609,6 +722,8 @@ void restart_game(int *game_over) { //여기도 game_over포인터 받아서
      // 키 입력이 있을 때까지 대기
     while (!kbhit()) usleep(1000);
     // 입력된 키 가져오기
+    while(1){
+
     re = getch();
 
     if (re == 'y' || re == 'Y') { //y/Y 입력시 재시작
@@ -618,10 +733,13 @@ void restart_game(int *game_over) { //여기도 game_over포인터 받아서
         init_stage();
 
         clrscr();
+        break;
+    }
+    else if (re == 'n' || re == 'N'){ //종료
+        *game_over = 1;
+        break;
     }
     
-    else { //종료
-        *game_over = 1;
     }
 }
 
