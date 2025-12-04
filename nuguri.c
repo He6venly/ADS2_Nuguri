@@ -17,6 +17,15 @@ void usleep(int us){
 
 void enable_raw_mode() { // 터미널 초기 설정
     SetConsoleOutputCP(65001);
+
+    //커서 왔다갔다와 깜빡거리는거 없애기 위해서 커서 삭제하는 로직 추가
+    HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE); //디아블로와 동일. 현재 창(콘솔)의 핸들(제어권) 얻어오기.
+    CONSOLE_CURSOR_INFO cursor; //커서info라는 window.h 구조체 받아오기. 커서에 대한 설정정보 구조체임.
+    cursor.dwSize = 100; //커서 사이즈 정해주기. 이거 안써주니까 커서 숨기기 반영이 안됨 ;;
+    cursor.bVisible = FALSE; // 그안에있는 bVisible로 커서 숨기라고(false)로 설정
+    SetConsoleCursorInfo(consoleHandle, &cursor); //설정 적용하기. & 붙이는 이유는 방금 setConsoleCursorInfo가 구조체 포인터 주소값을 파라미터로 받기 때문.
+
+    //윈도우는 cmd창 끄면 자동으로 커서 다시 보이기로 세팅되기때문에 disable row mode에서 다시켜줄필요 X
 }
 void disable_raw_mode() {}
 
@@ -34,13 +43,24 @@ int getch() {
 struct termios orig_termios;
 
 // 터미널 Raw 모드 활성화/비활성화
-void disable_raw_mode() { tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios); }
+void disable_raw_mode() { 
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+
+    //리눅스용 커서 다시 보이기
+    printf("\x1b[?25h"); //h는 켜기 (high)
+    fflush(stdout);
+}
 void enable_raw_mode() {
     tcgetattr(STDIN_FILENO, &orig_termios);
     atexit(disable_raw_mode);
     struct termios raw = orig_termios;
     raw.c_lflag &= ~(ECHO | ICANON);
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+
+    //리눅스용 커서 숨기기
+    printf("\x1b[?25l");  //터미널에게 내리는 명령 , x1b = escape 문자. 이문자 나오면 이제부터 명령어가 시작되는거라고 알려주는 깃발?
+                          // ?25 << 커서를 지칭하는 고유 번호, h는 켜기 (high), l(low)는 끄기를 의미함. 고로 ?25l << 커서 꺼라.
+    fflush(stdout);
 }
 
 // 비동기 키보드 입력 확인
@@ -76,16 +96,17 @@ void Beep(int frequency, int duration){
     (void)frequency;
     printf("\a");
     fflush(stdout);
+    usleep(duration*300);
 }
 
 #else
     #error "Unsupported platform!" // 현재는 Windows, MacOS, Linux를 제외한 다른 OS는 지원하지 않기 때문에 이외의 OS로 실행 시 에러를 뱉음.
 #endif
 
-// 맵 및 게임 요소 정의 (수정된 부분)
-#define MAP_WIDTH 40  // 맵 너비를 40으로 변경
-#define MAP_HEIGHT 20
-#define MAX_STAGES 2
+// 맵 및 게임 요소 정의 (수정된 부분), 동적할당 위해 전역변수 int로 교체?
+int MAP_WIDTH = 0;  
+int MAP_HEIGHT = 0;
+int MAX_STAGES = 0;
 #define MAX_ENEMIES 15 // 최대 적 개수 증가
 #define MAX_COINS 30   // 최대 코인 개수 증가
 
@@ -101,11 +122,12 @@ typedef struct {
 } Coin;
 
 // 전역 변수
-char map[MAX_STAGES][MAP_HEIGHT][MAP_WIDTH + 1];
+char ***map; //char map[MAX_STAGES][MAP_HEIGHT][MAP_WIDTH + 1]; 동적 맵 할당을 위해 3중 포인터로 변경 (3차원 배열이니 3중 포인터)
 int player_x, player_y;
 int stage = 0;
 int score = 0;
 int life = 3; //목숨 전역변수
+
 
 // 플레이어 상태
 int is_jumping = 0;
@@ -145,15 +167,171 @@ void move_sound();
 void get_coin_sound();
 void hit_enemy_sound();
 
+//동적맵관련 함수
+void scanMap(); //맵파일 읽어와서 변수에 넣어주기
+void dynamicMap(); //동적맵 할당 함수
+void dynamicMap_free(); //동적맵 free전용 함수
+
+//맵 읽어와서 사이즈 분석해서 길이 높이 스테이지 갯수 결정해주는 함수
+//뭐 존재하는 맵 중 최대길이/최대높이만큼 할당해야하니까.
+void scanMapSize() {
+    //여긴 loadMap과 동일
+    FILE *file = fopen("map.txt", "r");
+    if (!file) {
+        perror("map.txt 파일을 열 수 없습니다.");
+        exit(1);
+    }
+
+    char line[1000]; //한줄 읽어올 함수 대충 1000으로 길게 잡기
+
+    int width = 0;
+    int height = 0;
+    int maxWidth = 0;
+    int maxHeight = 0; //현재 읽는 스테이지 길이 높이 저장용이랑 malloc은 맵파일 전체중 최대크기 맵으로 할당해야하니 max변수도 추가
+    int stageCount = 1; //스테이지 카운트는 1부터
+
+    //여기도 load_map이랑 동일, 분석해서 길이 높이 구하는것만 목적이니 스테이지 조건검사는 없어도 됨.
+    while(fgets(line, sizeof(line), file)) {
+
+        int length = strlen(line); // 한줄 길이 저장. 이게 width가 되는것
+
+        //윈도우와 리눅스 둘다 개행 문자 처리하기 위해 \n\r 다해주기
+        //line[strcspn(line, "\n\r")] = 0; -> 이걸로 하니까 윈도우는 되는데 리눅스에서는 맵 로딩 안됨.
+        while(length > 0 && (line[length-1] == '\r' || line[length-1] == '\n')) {
+            line[length-1] = '\0';
+            length--;
+        }
+        
+        if(length == 0) { //맵은 빈줄 한줄로 다음 스테이지 구분하니까 0이면 다음 스테이지 구분자구나! 로 간주
+            //스테이지 구분선에 진입했고, height변수에 뭔가 저장되어 있으면 (그니까 스테이지 한개를 다 읽었다는 말이겠죠?)
+            if(height > 0) {
+                stageCount++; //그때 스테이지 카운트 +1 하고
+                if(height > maxHeight) { //지금 읽은 크기가 최대값인지 비교후
+                    maxHeight = height; //최대값이면 갱신해주고
+                }
+                height = 0; //스테이지별로 높이 저장해주는 height는 0으로 초기화하는 방식.
+            }
+            continue;
+        }
+        
+        //한줄 끝내고 최대 width(너비) 갱신, 맵이 width가 더 긴 맵을 만들수도 있으니까 꼼꼼히 검사
+        if(length > maxWidth) {
+            maxWidth = length;
+        }
+
+        //마지막 루프전에 높이 +1씩 계속해주기, 스테이지 끝나면 위에서 0으로 어차피 처리하고 continue하니까..
+        height++;
+    }
+
+    //파일 맨끝에 공백이 없을때 갱신이 안되는 버그가 있어서 파일 끝났으면 스페이스바 없어도 끝나기전에 최대높이 한번더 갱신해주기
+    if(height > 0) {
+        if(height > maxHeight) {
+            maxHeight = height;
+        }
+    }
+
+    //이제 다 검사했으면 전역변수에 저장
+    MAP_WIDTH = maxWidth;
+    MAP_HEIGHT = maxHeight;
+    MAX_STAGES = stageCount;
+
+    fclose(file); //닫는거 잊지말기~
+}   
+
+/* 12-04 선효 -> 동적 맵 할당 설명 가이드
+
+    일단 3중 포인터 구조부터
+    1차원 char* = 문자열 한 줄 (가로줄 하나, width)
+    2차원 char** = 이 한줄들이 모인 하나의 스테이지(세로값(height)가 곧 2차원 배열이 되는 느낌)
+    3차원 char*** = 이 스테이지(2차원 배열들)이 모인 배열 (전체 맵 데이터, stages)
+    
+    대충 이런 느낌이고
+
+    첫번째 스테이지 할당을 예시로 설명할게요
+
+    >> map = (char ***)malloc(sizeof(char **) * MAX_STAGES);
+
+    char*** 형변환은 왜?
+    -> malloc은 기본적으로 void 타입 메모리 공간 주소를 반환하는데, 얘는 얘가 뭔지도, 그냥 이만큼 공간 할당 하라니까 하는거지
+    뭔 주소인지도 뭔 타입인지도 모름. 그러니까 정확히 우리지금 char타입 맵 만든다, 3중 포인터 값이다. 라고 명시해주는 느낌..?
+    >> 근데이거 솔직히 저도 긴가민가 해요. 찾아보니 C언어에서는 자동으로 변환이 된다고도 하고?
+
+    malloc은 힙에 이만큼 메모리 자리좀 빌려다오.. 하는 건데 데이터 크기를 명확히 잡아줘야겠죠?
+    sizeof(char**) -> 이거면 char** 의 데이터 크기를 의미. 근데 포인터니까 주소값이겠죠? -> 64비트기준으로 주소값당 8바이트 고정
+    지금 저희 스테이지가 총 4개니까 8*4 = 32바이트만큼 할당요청.
+    스테이지 1, 2, 3, 4 각각으로 바로 갈수있는 주소를 적어둘 메모리 공간을 할당한다는 느낌이에요
+
+    다음으로 map[i] = (char **)malloc(sizeof(char *) * MAP_HEIGHT); 면 그럼 char ** (1개의 해당 스테이지) 안에서 연산하겠죠?
+    -> sizeof(char*) * Height니까 현재 스테이지(char**)가 높이가 얼마인가?  -> height가 20이면 20줄짜리 스테이지다 라는 의미.
+
+    마지막으로 map[i][k] = (char *)malloc(sizeof(char) * MAP_WIDTH + 1); -> 이제 char * (해당 스테이지 안의 한 줄)
+    -> 이제 몇 스테이지 몇번째 줄인지까지 접근했으니까, 맵을 찍어야되잖아요? 그래서 이제 sizeof(char)로 char (1바이트)짜리 크기로 할당해서 맵을 쭉 찍는거임
+    얼마만큼? MAP_WDITH만큼. MAP_WIDTH는 뭐다? 처음에 맵 분석할때 MAP파일 전체 스테이지중 최대 사이즈만큼 되어있다.
+    +1은 왜? >> 계속 설명했지만 C는 문자열 끝날때 널문자 필수. 라인 한줄씩 찍으니까 라인 끝날때마다 +1로 널문자 넣어줄 공간 할당.
+*/
+
+//동적 맵 할당 함수
+void dynamicMap() {
+    map = (char ***)malloc(sizeof(char **) * MAX_STAGES); //일단 스테이지 갯수부터 할당(첫번째 차원 포인터)
+                                                        // 스테이지는 2차원 배열을 원소로 가지는 배열임. 앞에서 분석해둔 스테이지 갯수만큼 곱해서 총 스테이지 갯수만큼 스테이지 메모리부터 할당.
+                                                        // 이 친구는 주소값을 가지니까 64비트 기준 개당 8바이트씩, 8 * 스테이지 갯수만큼 메모리 할당.
+    if (map == NULL) {
+        printf("맵 할당 오류"); // 없으면 걍 종료
+        exit(0);
+    } 
+
+    //이제 2차원, 맵 높이(c언어 2차원 배열에서는 행에 해당) 할당해주기
+    for(int i = 0; i < MAX_STAGES; i++) {
+        map[i] = (char **)malloc(sizeof(char *) * MAP_HEIGHT); //이제 2차원, 스테이지 안에 있는 제일 큰 맵 높이만큼 메모리 할당 (앞에서 MaxHeight를 MAP_HEGIHT로 해놨음.)
+        if (map[i] == NULL) {
+            printf("맵 할당 오류"); // 없으면 걍 종료
+            exit(0);
+        }
+
+        //2차원 반복문 안에서 각 행의 width만큼 할당 (여기가 3차원, 열에 해당) 할당해주기
+        for(int k = 0; k < MAP_HEIGHT; k++) {
+            map[i][k] = (char *)malloc(sizeof(char) * MAP_WIDTH + 1); // 각 스테이지 문자열 끝에 항상 \0(끝문자)가 오니까 + 1 해주는거 잊지말기!!!
+            if (map[i][k] == NULL) {
+                printf("맵 할당 오류"); // 없으면 걍 종료
+                exit(0);
+            }
+            
+            //최대크기보다 작은 맵이 들어왔을때 해당 칸에 읽어올게 없으면 다 공백으로 세팅해주기 (화면 지우는 느낌?)
+            //아근데 솔직히 3중포문이라 맘에 안들긴 함.. ㅠ
+            for (int j = 0; j < MAP_WIDTH; j++) {
+                map[i][k][j] = ' '; 
+            }
+            
+            //문자열 끝에 널문자 사뿐하게
+            map[i][k][MAP_WIDTH] = '\0';
+        }   
+    }
+}
+
+//맵 할당 해제. 프로그램 종료할때만 해주면 될 듯
+void dynamicMap_free() {
+    //위에서 할당했던 스테이지 갯수(1차원) -> 맵 높이(2차원) -> 맵 넓이(3차원)의 역순으로 닫아주면 됨
+    // width -> height -> stages 순으로 닫으니 2중배열을 stage -> height 순으로 감싸주기
+    for(int i = 0; i < MAX_STAGES; i++) {
+        for(int k = 0; k < MAP_HEIGHT; k++) {
+            free(map[i][k]);
+        }
+        free(map[i]);
+    }
+    free(map);
+}
 
 int main() {
     srand(time(NULL));
-
     enable_raw_mode(); // rawmode를 title 호출 로직 뒤로 옮김.
+
+    scanMapSize(); //맵 할당하려고 읽어오기
+    dynamicMap(); //동적 할당
 
     // title 화면에서 0 선택 시 게임 종료, 1 선택 시 title 함수 내부에서 openingUI 함수 호출
     if(title() == 0){ 
         disable_raw_mode();
+        dynamicMap_free(); //종료할때 free 꼭!!
         return 0;
     }
 
@@ -167,7 +345,7 @@ int main() {
 
     while (!game_over && stage < MAX_STAGES) {
         if (kbhit()) {
-            while (kbhit()){  //버퍼에 입력 쌓이는데 한 프레임당 kbhit이 입력값 하나만 들고옴 -> 버퍼에 쌓여서 떼도 움직임
+            while (kbhit()) {  //버퍼에 입력 쌓이는데 한 프레임당 kbhit이 입력값 하나만 들고옴 -> 버퍼에 쌓여서 떼도 움직임
                 int temp = getch(); // 입력을 임시로 저장해두고
                 
                 // 키가 자꾸 씹히니까 일단 임시 저장한게 왼쪽 오른쪽 이동이면 바로 공중점프 로직에 반영
@@ -181,19 +359,19 @@ int main() {
                 //c = getch() 원래 로직이니 temp를 그냥 넣어주기
                 c = temp;
 
-            if (c == 'q') { //while문으로 한 프레임에 버퍼 비울때까지 가져와서 입력 안밀림 -> 버퍼에서 읽어와서 c에 계속 덮어쓴다고 생각
-                game_over = 1;
-                continue;
-            }
-            if (c == '\x1b') {
-                getch(); // '['
-                switch (getch()) { //다른 키 입력할 때 define A B C D 해서 하는 거 같은데 화살표 구현떄문에 남긴건가
-                    case 'A': c = 'w'; break; // Up
-                    case 'B': c = 's'; break; // Down
-                    case 'C': c = 'd'; break; // Right
-                    case 'D': c = 'a'; break; // Left
+                if (c == 'q') { //while문으로 한 프레임에 버퍼 비울때까지 가져와서 입력 안밀림 -> 버퍼에서 읽어와서 c에 계속 덮어쓴다고 생각
+                    game_over = 1;
+                    continue;
                 }
-            }
+                if (c == '\x1b') {
+                    getch(); // '['
+                    switch (getch()) { //다른 키 입력할 때 define A B C D 해서 하는 거 같은데 화살표 구현떄문에 남긴건가
+                        case 'A': c = 'w'; break; // Up
+                        case 'B': c = 's'; break; // Down
+                        case 'C': c = 'd'; break; // Right
+                        case 'D': c = 'a'; break; // Left
+                    }
+                }
             }
         } else {
             c = '\0';
@@ -218,6 +396,7 @@ int main() {
     return 0;
 }
 
+
 // 맵 파일 로드
 void load_maps() {
     FILE *file = fopen("map.txt", "r");
@@ -226,7 +405,9 @@ void load_maps() {
         exit(1);
     }
     int s = 0, r = 0;
-    char line[MAP_WIDTH + 2]; // 버퍼 크기는 MAP_WIDTH에 따라 자동 조절됨
+    char line[MAP_WIDTH + 4]; // 버퍼 크기는 MAP_WIDTH에 따라 자동 조절됨 , +2로 남겨두니까 /r/n의 윈도우와 리눅스 처리 방식 차이에 따라서
+                              // 1바이트 차이로 리눅스 환경에서는 맵 로딩이 정상적으로 되지 않는 버그 발생. +4정도로 넉넉하게 잡아줌.
+                              // \r\n은 윈도우는 \r을 없애고 \n으로 자동 변환시켜서 가져오는데, 리눅스는 \r\n을 그대로 가져오기에 발생하는 문제였음.
 
     while (s < MAX_STAGES && fgets(line, sizeof(line), file)) {
         if ((line[0] == '\n' || line[0] == '\r') && r > 0) {
@@ -235,13 +416,13 @@ void load_maps() {
             continue;
         }
         if (r < MAP_HEIGHT) {
-            line[strcspn(line, "\n\r")] = 0;
-            
-            if (r < MAP_HEIGHT) {
-                line[strcspn(line, "\n\r")] = 0;
-                strncpy(map[s][r], line, MAP_WIDTH + 1);
-                r++;
-            }
+            size_t line_len = strcspn(line, "\n\r");
+            line[line_len] = '\0';
+            // dynamicMap에서 이미 이전보다 크기가 작아질 경우 ' '로 초기화를 했기 때문에 건드리지 않고 길이를 제한한다.
+            if (line_len > (size_t)MAP_WIDTH) line_len = MAP_WIDTH;
+            memcpy(map[s][r], line, line_len);
+
+            r++;
         }
     }
     fclose(file);
@@ -370,7 +551,7 @@ void move_player(char input, int *game_over) {
             }
             break;
         case ' ':
-            if (!is_jumping && (floor_tile == '#' || on_ladder)) {
+            if (!is_jumping && (floor_tile == '#' || on_ladder || isBottomLadder)) {
                 is_jumping = 1;
                 velocity_y = -2;
                 moved_by_input = 1;
@@ -403,6 +584,9 @@ void move_player(char input, int *game_over) {
     //여기부터 점프 로직 y축검사.
     else {
         if (is_jumping) {
+            //제자리 점프중에 오른쪽 왼쪽 입력으로 이동할수있게 하기
+            if (input == 'a') j_dirction = -1;
+            else if (input == 'd') j_dirction = 1;
 
             //기존에 있던 점프처리 (y축검사)
             next_y = player_y + velocity_y;
@@ -417,11 +601,14 @@ void move_player(char input, int *game_over) {
                     check_collisions(player_x, player_y + k, game_over, 1); //위의 충돌검사 y축 이후에 검사하도록 옮김
                 } // ->검사문에 안걸림 = 벽 없음
 
-
-                if (next_y >= 0 && map[stage][next_y][player_x] != '#') {
-                    player_y = next_y; //따라서 그냥 점프
-                } else {
-                    velocity_y = 0;
+                //버그수정. 점프해서 위의 벽 검사에서  y+1에 벽이 있는지 검사하는데, for문 밖에서 y+2에 벽이 없으면 된다고 판단하고 벽 뚫고 점프함.
+                //if문 한번 더 씌워서 충돌이 없을때만 이동하게 바꿨음.
+                if (velocity_y != 0) {
+                    if (next_y >= 0 && map[stage][next_y][player_x] != '#') {
+                        player_y = next_y; //따라서 그냥 점프
+                    } else {
+                        velocity_y = 0;
+                    }
                 }
 
             } else { //점프 눌렀을 때 올라가는 경우가 아니면 -> 떨어질 때
