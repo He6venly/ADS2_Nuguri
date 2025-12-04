@@ -105,15 +105,16 @@ gcc nuguri.c -o nuguri
 
 ---
 
-### 3.2 인게임 화면 구성 (README 이미지 예시용)
+### 3.2 인게임 화면 구성
 
-[여기 스샷 넣어야댐]
 
-```markdown
-![타이틀 화면](docs/images/title.png)
-![인게임 화면](docs/images/ingame.png)
-![클리어 화면](docs/images/clear.png)
-```
+![타이틀 화면](./screenshot/title.png)
+![게임 시작 화면](./screenshot/gameStart.png)
+![스테이지 1 화면](./screenshot/stage1.png)
+![스테이지 2 화면](./screenshot/stage2.png)
+![스테이지 3 화면](./screenshot/stage3.png)
+![스테이지 4 화면](./screenshot/stage4.png)
+![클리어 화면](./screenshot/gameClear.png)
 
 ---
 
@@ -371,7 +372,7 @@ if(getch()) {
  
 **해결**
 - `restart_game()`에서  
-  - `score`, `life`, `stage`, `game_over` 등 모든 전역 상태를 명시적으로 초기화
+  - `score`, `life`, `stage` 등 모든 게임 구성 변수 상태를 초기 상태로 되돌림.
   - 그리고 y입력 분기 처리에서 *game_over 변수를 건드리고 있어서 이를 삭제하여 해결함.
 
 ---
