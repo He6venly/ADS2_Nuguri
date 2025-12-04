@@ -416,13 +416,13 @@ void load_maps() {
             continue;
         }
         if (r < MAP_HEIGHT) {
-            line[strcspn(line, "\n\r")] = 0;
-            
-            if (r < MAP_HEIGHT) {
-                line[strcspn(line, "\n\r")] = 0;
-                strncpy(map[s][r], line, MAP_WIDTH + 1);
-                r++;
-            }
+            size_t line_len = strcspn(line, "\n\r");
+            line[line_len] = '\0';
+            // dynamicMap에서 이미 이전보다 크기가 작아질 경우 ' '로 초기화를 했기 때문에 건드리지 않고 길이를 제한한다.
+            if (line_len > (size_t)MAP_WIDTH) line_len = MAP_WIDTH;
+            memcpy(map[s][r], line, line_len);
+
+            r++;
         }
     }
     fclose(file);
